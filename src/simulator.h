@@ -87,6 +87,14 @@ public:
   std::uint64_t getFoxCount() const { return this->count_fox; }
   std::uint32_t getStep() const { return this->step; }
 
+  std::uint32_t getGenProcRabbits() const { return this->GEN_PROC_RABBITS; }
+  std::uint32_t getGenProcFoxes() const { return this->GEN_PROC_FOXES; }
+  std::uint32_t getGenFoodFoxes() const { return this->GEN_FOOD_FOXES; }
+
+  void setGenProcRabbits(std::uint32_t v) { this->GEN_PROC_RABBITS = v; }
+  void setGenProcFoxes(std::uint32_t v) { this->GEN_PROC_FOXES = v; }
+  void setGenFoodFoxes(std::uint32_t v) { this->GEN_FOOD_FOXES = v; }
+
   void update();
 };
 

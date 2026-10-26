@@ -14,7 +14,12 @@ out/
 *.o
 *.obj
 
-# Executables
+# Executables & Libraries
 *.exe
 *.out
 *.app
+*.dll
+raylib/
+
+#Results folder
+results/
