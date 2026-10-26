@@ -2,11 +2,11 @@
 build/
 bin/
 out/
-.vscode/
 
-# Clangd index cache
-.cache/
+# Editor & Tooling
+.vscode/
 .clangd
+.cache/
 
 # Compiled Object files
 *.slo
