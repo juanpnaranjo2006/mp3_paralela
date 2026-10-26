@@ -63,6 +63,13 @@ public:
             std::vector<std::unique_ptr<Entity>> &entities,
             std::vector<std::pair<std::size_t, std::size_t>> &positions);
 
+  Simulator(std::size_t width, std::size_t height,
+            std::uint32_t gen_proc_rabbits,
+            std::uint32_t gen_proc_foxes,
+            std::uint32_t gen_food_foxes,
+            std::vector<std::unique_ptr<Entity>> &entities,
+            std::vector<std::pair<std::size_t, std::size_t>> &positions);
+
   ~Simulator();
 
   Simulator(const Simulator &) = delete;

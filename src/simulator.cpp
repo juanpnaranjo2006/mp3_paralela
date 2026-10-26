@@ -5,7 +5,19 @@
 Simulator::Simulator(
     std::size_t width, std::size_t height,
     std::vector<std::unique_ptr<Entity>> &entities,
+    std::vector<std::pair<std::size_t, std::size_t>> &positions)
+    : Simulator(width, height, 0, 0, 0, entities, positions) {}
+
+Simulator::Simulator(
+    std::size_t width, std::size_t height,
+    std::uint32_t gen_proc_rabbits,
+    std::uint32_t gen_proc_foxes,
+    std::uint32_t gen_food_foxes,
+    std::vector<std::unique_ptr<Entity>> &entities,
     std::vector<std::pair<std::size_t, std::size_t>> &positions) {
+  this->GEN_PROC_RABBITS = gen_proc_rabbits;
+  this->GEN_PROC_FOXES = gen_proc_foxes;
+  this->GEN_FOOD_FOXES = gen_food_foxes;
   this->entities = std::move(entities);
   this->step = 0;
 
@@ -278,8 +290,8 @@ void Simulator::update() {
       hunting = true;
       new_pos = selectDisplacement(this->step, fox->x, fox->y, rabbit_moves);
     } else {
-      // Regla de inanición: si no hay conejos y starve_age >= GEN_FOOD_FOXES, muere antes de buscar vacías
-      if (fox->starve_age >= GEN_FOOD_FOXES) {
+      // Regla de inanición: al no encontrar conejo para comer en este turno, si alcanza GEN_FOOD_FOXES muere antes de buscar vacías
+      if (fox->starve_age + 1 >= GEN_FOOD_FOXES) {
         fox->is_alive = false;
         count_fox--;
         continue;
