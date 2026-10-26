@@ -53,14 +53,18 @@ Simulator::getPossibleMovesRabbit(std::size_t x, std::size_t y) {
   size_t w = (*(this->grid)).getWidth();
 
   std::vector<std::pair<std::size_t, std::size_t>> possible_moves;
-  if (x > 0 && isMoveable(x - 1, y) && !isFox(x - 1, y))
-    possible_moves.push_back(std::make_pair(x - 1, y));
+  /*By following the clockwise order, start numbering from 0 the possible
+    P cells to where a fox/rabbit can move (adjacent north, east, south
+    and west cells).
+  */
+  if (y < h - 1 && isMoveable(x, y + 1) && !isFox(x, y + 1))
+    possible_moves.push_back(std::make_pair(x, y + 1));
   if (x < w - 1 && isMoveable(x + 1, y) && !isFox(x + 1, y))
     possible_moves.push_back(std::make_pair(x + 1, y));
   if (y > 0 && isMoveable(x, y - 1) && !isFox(x, y - 1))
     possible_moves.push_back(std::make_pair(x, y - 1));
-  if (y < h - 1 && isMoveable(x, y + 1) && !isFox(x, y + 1))
-    possible_moves.push_back(std::make_pair(x, y + 1));
+  if (x > 0 && isMoveable(x - 1, y) && !isFox(x - 1, y))
+    possible_moves.push_back(std::make_pair(x - 1, y));
 
   return possible_moves;
 }
@@ -71,27 +75,34 @@ Simulator::getPossibleMovesFox(std::size_t x, std::size_t y) {
   size_t w = (*(this->grid)).getWidth();
 
   std::vector<std::pair<std::size_t, std::size_t>> possible_moves;
-  if (x > 0 && isRabbit(x - 1, y))
-    possible_moves.push_back(std::make_pair(x - 1, y));
+  /*If there are any rabbits in one of the 4 adjacent cells, the fox will
+  prioritize eating them instead of moving.
+  */
+  /*By following the clockwise order, start numbering from 0 the possible
+    P cells to where a fox/rabbit can move (adjacent north, east, south
+    and west cells).
+  */
+  if (y < h - 1 && isRabbit(x, y + 1))
+    possible_moves.push_back(std::make_pair(x, y + 1));
   if (x < w - 1 && isRabbit(x + 1, y))
     possible_moves.push_back(std::make_pair(x + 1, y));
   if (y > 0 && isRabbit(x, y - 1))
     possible_moves.push_back(std::make_pair(x, y - 1));
-  if (y < h - 1 && isRabbit(x, y + 1))
-    possible_moves.push_back(std::make_pair(x, y + 1));
+  if (x > 0 && isRabbit(x - 1, y))
+    possible_moves.push_back(std::make_pair(x - 1, y));
 
   if (!possible_moves.empty()) {
     return possible_moves;
   }
 
-  if (x > 0 && isMoveable(x - 1, y))
-    possible_moves.push_back(std::make_pair(x - 1, y));
+  if (y < h - 1 && isMoveable(x, y + 1))
+    possible_moves.push_back(std::make_pair(x, y + 1));
   if (x < w - 1 && isMoveable(x + 1, y))
     possible_moves.push_back(std::make_pair(x + 1, y));
   if (y > 0 && isMoveable(x, y - 1))
     possible_moves.push_back(std::make_pair(x, y - 1));
-  if (y < h - 1 && isMoveable(x, y + 1))
-    possible_moves.push_back(std::make_pair(x, y + 1));
+  if (x > 0 && isMoveable(x - 1, y))
+    possible_moves.push_back(std::make_pair(x - 1, y));
 
   return possible_moves;
 }
