@@ -9,10 +9,8 @@ Simulator::Simulator(
     : Simulator(width, height, 0, 0, 0, entities, positions) {}
 
 Simulator::Simulator(
-    std::size_t width, std::size_t height,
-    std::uint32_t gen_proc_rabbits,
-    std::uint32_t gen_proc_foxes,
-    std::uint32_t gen_food_foxes,
+    std::size_t width, std::size_t height, std::uint32_t gen_proc_rabbits,
+    std::uint32_t gen_proc_foxes, std::uint32_t gen_food_foxes,
     std::vector<std::unique_ptr<Entity>> &entities,
     std::vector<std::pair<std::size_t, std::size_t>> &positions) {
   this->GEN_PROC_RABBITS = gen_proc_rabbits;
@@ -58,16 +56,30 @@ bool Simulator::isEmpty(std::size_t x, std::size_t y) {
 
 bool Simulator::isRabbitInNextGrid(std::size_t x, std::size_t y) {
   Entity *cell = (*(this->next_grid))[y][x];
-  return (cell != nullptr && cell->is_alive && cell->type == EntityType::RABBIT);
+  return (cell != nullptr && cell->is_alive &&
+          cell->type == EntityType::RABBIT);
 }
 
 bool Simulator::isCellEmptyForFox(std::size_t x, std::size_t y) {
+  /*
+  BUG FIX: Previamente cuando ya había un fox en next_grid, esta
+  casilla no se consideraba como opción.
+
+  En realidad el enunciado
+  pedía actuar como si todos los zorros se movieran al tiempo y
+  dejar en cada casilla al zorro con más chances de sobrevivir
+  de acuerdo la regla definida.
+
+  La anterior versión era un problema ya que impedía mover a
+  un zorro moverse a una casilla en next_grid si ya había otro zorro en ella,
+  siendo que este no necesiramente el primer zorro en llegar a la casilla
+  es el que debe quedarse en ella.
+
+  La solución es permitir el movimiento a celdas ya ocupadas en next_grid
+  y dejar que el criterio de desempate deje vivo al zorro más óptimo.
+  */
   Entity *curr = (*(this->grid))[y][x];
-  if (curr != nullptr && (curr->type == EntityType::ROCK || curr->type == EntityType::FOX)) {
-    return false;
-  }
-  Entity *next = (*(this->next_grid))[y][x];
-  return (next == nullptr);
+  return (curr == nullptr);
 }
 
 bool Simulator::isMoveable(std::size_t x, std::size_t y) {
@@ -216,7 +228,8 @@ void Simulator::update() {
     if (possible_moves.empty()) {
       new_pos = std::make_pair(prev_x, prev_y);
     } else {
-      new_pos = selectDisplacement(this->step, rabbit->x, rabbit->y, possible_moves);
+      new_pos =
+          selectDisplacement(this->step, rabbit->x, rabbit->y, possible_moves);
     }
 
     if (new_pos.first == prev_x && new_pos.second == prev_y) {
@@ -255,9 +268,7 @@ void Simulator::update() {
         child->x = prev_x;
         child->y = prev_y;
         child->proc_age = 0;
-        child->starve_age = 0;
         child->is_alive = true;
-        child->is_new = false;
         this->entities.push_back(std::move(child));
         new_rabbits.push_back(this->entities.back().get());
         this->count_rabbit++;
@@ -268,10 +279,12 @@ void Simulator::update() {
       }
     }
   }
-  this->rabbits.insert(this->rabbits.end(), new_rabbits.begin(), new_rabbits.end());
+  this->rabbits.insert(this->rabbits.end(), new_rabbits.begin(),
+                       new_rabbits.end());
 
   // 3. Mover los zorros
   std::vector<Entity *> new_foxes;
+  std::vector<Entity *> dead_rabbits;
   for (auto &fox : this->foxes) {
     if (!fox->is_alive) {
       continue;
@@ -290,10 +303,12 @@ void Simulator::update() {
       hunting = true;
       new_pos = selectDisplacement(this->step, fox->x, fox->y, rabbit_moves);
     } else {
-      // Regla de inanición: al no encontrar conejo para comer en este turno, si alcanza GEN_FOOD_FOXES muere antes de buscar vacías
+      // Regla de inanición: al no encontrar conejo para comer en este turno, si
+      // alcanza GEN_FOOD_FOXES muere antes de buscar vacías
       if (fox->starve_age + 1 >= GEN_FOOD_FOXES) {
         fox->is_alive = false;
         count_fox--;
+        fox->starve_age++;
         continue;
       }
 
@@ -321,9 +336,23 @@ void Simulator::update() {
       fox->y = new_pos.second;
       fox->starve_age++;
     } else if (neighbor->type == EntityType::RABBIT) {
-      // El zorro come al conejo
-      neighbor->is_alive = false;
-      count_rabbit--;
+      // BUG: Matar al conejo hace que al procesar otros zorros no lo consideren
+      // como posible presa cuando se supone que todos los zorros se mueven a la
+      // vez y gana el más apto.
+
+      // neighbor->is_alive = false;
+      // count_rabbit--;
+
+      /*Solución:
+      TODO: Solución a este problema
+      Propuesta (también simplificaria conejos):
+      No actualizar de una el grid sino guardar en una pila todos
+      los movimientos de los animales de la misma especie.
+      Luego, se procesa la pila y los conflictos que vayan surgiendo
+      se resuelven, como escoger al animal apto para sobrevivir
+      según el criterio definido.
+      */
+      dead_rabbits.push_back(neighbor);
 
       this->next_grid->addEntity(fox, new_pos);
       fox->x = new_pos.first;
@@ -332,7 +361,8 @@ void Simulator::update() {
     } else if (neighbor->type == EntityType::FOX) {
       // Conflicto de zorros: mayor proc_age, o menor starve_age si empatan
       bool fox_wins = (fox->proc_age > neighbor->proc_age) ||
-                      (fox->proc_age == neighbor->proc_age && fox->starve_age < neighbor->starve_age);
+                      (fox->proc_age == neighbor->proc_age &&
+                       fox->starve_age < neighbor->starve_age);
 
       bool ate_rabbit = hunting || (neighbor->starve_age == 0);
 
@@ -379,6 +409,12 @@ void Simulator::update() {
     }
   }
   this->foxes.insert(this->foxes.end(), new_foxes.begin(), new_foxes.end());
+
+  // Matar conejos cazados
+  for (auto &rabbit : dead_rabbits) {
+    rabbit->is_alive = false;
+    count_rabbit--;
+  }
 
   delete this->grid;
   this->grid = this->next_grid;

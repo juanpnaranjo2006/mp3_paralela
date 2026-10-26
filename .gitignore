@@ -23,3 +23,6 @@ raylib/
 
 #Results folder
 results/
+
+#Test Files folder
+ecosystem_examples/
