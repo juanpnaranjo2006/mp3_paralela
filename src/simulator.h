@@ -26,9 +26,9 @@ private:
   std::pair<std::size_t, std::size_t> chooseAdjCell(std::size_t x,
                                                     std::size_t y);
 
-  std::pair<int, int> selectDisplacement(
+  std::pair<std::size_t, std::size_t> selectDisplacement(
       std::uint32_t g, std::size_t x, std::size_t y,
-      std::vector<std::pair<std::size_t, std::size_t>> &possible_moves);
+      const std::vector<std::pair<std::size_t, std::size_t>> &possible_moves);
 
   std::vector<std::pair<std::size_t, std::size_t>>
   getPossibleMoves(std::size_t x, std::size_t y);
@@ -37,7 +37,19 @@ private:
   getPossibleMovesRabbit(std::size_t x, std::size_t y);
 
   std::vector<std::pair<std::size_t, std::size_t>>
+  getRabbitMovesForFox(std::size_t x, std::size_t y);
+
+  std::vector<std::pair<std::size_t, std::size_t>>
+  getEmptyMovesForFox(std::size_t x, std::size_t y);
+
+  std::vector<std::pair<std::size_t, std::size_t>>
   getPossibleMovesFox(std::size_t x, std::size_t y);
+
+  bool isEmpty(std::size_t x, std::size_t y);
+
+  bool isRabbitInNextGrid(std::size_t x, std::size_t y);
+
+  bool isCellEmptyForFox(std::size_t x, std::size_t y);
 
   bool isMoveable(std::size_t x, std::size_t y);
 
@@ -51,7 +63,7 @@ public:
             std::vector<std::unique_ptr<Entity>> &entities,
             std::vector<std::pair<std::size_t, std::size_t>> &positions);
 
-  ~Simulator() = default;
+  ~Simulator();
 
   Simulator(const Simulator &) = delete;
   Simulator &operator=(const Simulator &) = delete;
