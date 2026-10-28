@@ -47,7 +47,7 @@ int main() {
     entity->proc_age = 0;
     entity->starve_age = 0;
     entity->is_alive = true;
-    entity->is_new = false;
+    entity->just_ate = false;
 
     if (type_str == "ROCK") {
       entity->type = EntityType::ROCK;
@@ -95,8 +95,8 @@ int main() {
     }
   }
 
-  // Imprimir cabecera de salida con el número final de generaciones restantes (0)
-  // y la cantidad de objetos finales
+  // Imprimir cabecera de salida con el número final de generaciones restantes
+  // (0) y la cantidad de objetos finales
   std::cout << gen_proc_rabbits << " " << gen_proc_foxes << " "
             << gen_food_foxes << " " << 0 << " " << r << " " << c << " "
             << final_objects.size() << "\n";

@@ -11,7 +11,7 @@ struct Entity {
   std::uint32_t proc_age;
   std::uint32_t starve_age;
   bool is_alive;
-  bool is_new;
+  bool just_ate;
   std::size_t x;
   std::size_t y;
 };

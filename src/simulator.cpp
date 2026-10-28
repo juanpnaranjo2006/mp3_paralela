@@ -213,11 +213,13 @@ void Simulator::update() {
   size_t prev_y;
 
   // 2. Mover los conejos
-  std::vector<Entity *> new_rabbits;
+  std::vector<Entity *> move_rabbits;
+  std::vector<std::pair<std::size_t, std::size_t>> new_positions;
   for (auto &rabbit : this->rabbits) {
     if (!rabbit->is_alive) {
       continue;
     }
+
     prev_x = rabbit->x;
     prev_y = rabbit->y;
 
@@ -231,13 +233,20 @@ void Simulator::update() {
       new_pos =
           selectDisplacement(this->step, rabbit->x, rabbit->y, possible_moves);
     }
+    move_rabbits.push_back(rabbit);
+    new_positions.push_back(new_pos);
+  }
 
-    if (new_pos.first == prev_x && new_pos.second == prev_y) {
-      this->next_grid->addEntity(rabbit, new_pos);
-      rabbit->proc_age++;
-      continue;
-    }
+  // 2.5. Procesar conflictos entre conejos
+  std::vector<Entity *> new_rabbits;
+  for (size_t i = 0; i < move_rabbits.size(); i++) {
+    Entity *rabbit = move_rabbits[i];
 
+    prev_x = rabbit->x;
+    prev_y = rabbit->y;
+    std::pair<std::size_t, std::size_t> new_pos = new_positions[i];
+
+    // Ver si hay otros conejos en la misma casilla
     Entity *neighbor = (*(this->next_grid))[new_pos.second][new_pos.first];
     if (neighbor == nullptr) {
       this->next_grid->addEntity(rabbit, new_pos);
@@ -258,8 +267,11 @@ void Simulator::update() {
     }
 
     // Procreación si sobrevivió y se movió
+    // TODO: Preguntar al profesor si los conejos procrean al moverse aunque
+    // terminen muriendo
+    bool didMove = prev_x != new_pos.first || prev_y != new_pos.second;
     if (rabbit->is_alive) {
-      if (rabbit->proc_age >= GEN_PROC_RABBITS) {
+      if (rabbit->proc_age >= GEN_PROC_RABBITS && didMove) {
         rabbit->proc_age = 0;
 
         std::unique_ptr<Entity> child = std::make_unique<Entity>();
@@ -279,28 +291,28 @@ void Simulator::update() {
       }
     }
   }
+
   this->rabbits.insert(this->rabbits.end(), new_rabbits.begin(),
                        new_rabbits.end());
 
   // 3. Mover los zorros
-  std::vector<Entity *> new_foxes;
-  std::vector<Entity *> dead_rabbits;
+  std::vector<Entity *> move_foxes;
+  new_positions.clear();
   for (auto &fox : this->foxes) {
     if (!fox->is_alive) {
       continue;
     }
     prev_x = fox->x;
     prev_y = fox->y;
+    fox->just_ate = false;
 
     // A. Buscar conejos adyacentes en next_grid
     std::vector<std::pair<std::size_t, std::size_t>> rabbit_moves =
         getRabbitMovesForFox(fox->x, fox->y);
 
     std::pair<std::size_t, std::size_t> new_pos;
-    bool hunting = false;
 
     if (!rabbit_moves.empty()) {
-      hunting = true;
       new_pos = selectDisplacement(this->step, fox->x, fox->y, rabbit_moves);
     } else {
       // Regla de inanición: al no encontrar conejo para comer en este turno, si
@@ -322,12 +334,19 @@ void Simulator::update() {
       }
     }
 
-    if (new_pos.first == prev_x && new_pos.second == prev_y) {
-      this->next_grid->addEntity(fox, new_pos);
-      fox->starve_age++;
-      fox->proc_age++;
-      continue;
-    }
+    move_foxes.push_back(fox);
+    new_positions.push_back(new_pos);
+  }
+
+  // 3.5. Resolver conflictos entre zorros
+  std::vector<Entity *> new_foxes;
+  std::vector<Entity *> dead_rabbits;
+  for (size_t i = 0; i < move_foxes.size(); i++) {
+    Entity *fox = move_foxes[i];
+    std::pair<std::size_t, std::size_t> new_pos = new_positions[i];
+
+    prev_x = fox->x;
+    prev_y = fox->y;
 
     Entity *neighbor = (*(this->next_grid))[new_pos.second][new_pos.first];
     if (neighbor == nullptr) {
@@ -335,6 +354,7 @@ void Simulator::update() {
       fox->x = new_pos.first;
       fox->y = new_pos.second;
       fox->starve_age++;
+      fox->just_ate = false;
     } else if (neighbor->type == EntityType::RABBIT) {
       // BUG: Matar al conejo hace que al procesar otros zorros no lo consideren
       // como posible presa cuando se supone que todos los zorros se mueven a la
@@ -344,7 +364,7 @@ void Simulator::update() {
       // count_rabbit--;
 
       /*Solución:
-      TODO: Solución a este problema
+      DONE: Solución a este problema
       Propuesta (también simplificaria conejos):
       No actualizar de una el grid sino guardar en una pila todos
       los movimientos de los animales de la misma especie.
@@ -358,13 +378,14 @@ void Simulator::update() {
       fox->x = new_pos.first;
       fox->y = new_pos.second;
       fox->starve_age = 0;
+      fox->just_ate = true;
     } else if (neighbor->type == EntityType::FOX) {
       // Conflicto de zorros: mayor proc_age, o menor starve_age si empatan
       bool fox_wins = (fox->proc_age > neighbor->proc_age) ||
                       (fox->proc_age == neighbor->proc_age &&
                        fox->starve_age < neighbor->starve_age);
 
-      bool ate_rabbit = hunting || (neighbor->starve_age == 0);
+      bool ate_rabbit = neighbor->just_ate;
 
       if (fox_wins) {
         neighbor->is_alive = false;
@@ -385,8 +406,11 @@ void Simulator::update() {
     }
 
     // Procreación si sobrevivió y se movió
+    // TODO: Preguntar al profesor si los conejos procrean al moverse aunque
+    // terminen muriendo
+    bool didMove = prev_x != new_pos.first || prev_y != new_pos.second;
     if (fox->is_alive) {
-      if (fox->proc_age >= GEN_PROC_FOXES) {
+      if (fox->proc_age >= GEN_PROC_FOXES && didMove) {
         fox->proc_age = 0;
 
         std::unique_ptr<Entity> child = std::make_unique<Entity>();
@@ -397,7 +421,7 @@ void Simulator::update() {
         child->proc_age = 0;
         child->starve_age = 0;
         child->is_alive = true;
-        child->is_new = false;
+        child->just_ate = false;
         this->entities.push_back(std::move(child));
         new_foxes.push_back(this->entities.back().get());
         this->count_fox++;
@@ -408,6 +432,7 @@ void Simulator::update() {
       }
     }
   }
+
   this->foxes.insert(this->foxes.end(), new_foxes.begin(), new_foxes.end());
 
   // Matar conejos cazados
