@@ -61,25 +61,16 @@ bool Simulator::isRabbitInNextGrid(std::size_t x, std::size_t y) {
 }
 
 bool Simulator::isCellEmptyForFox(std::size_t x, std::size_t y) {
-  /*
-  BUG FIX: Previamente cuando ya había un fox en next_grid, esta
-  casilla no se consideraba como opción.
-
-  En realidad el enunciado
-  pedía actuar como si todos los zorros se movieran al tiempo y
-  dejar en cada casilla al zorro con más chances de sobrevivir
-  de acuerdo la regla definida.
-
-  La anterior versión era un problema ya que impedía mover a
-  un zorro moverse a una casilla en next_grid si ya había otro zorro en ella,
-  siendo que este no necesiramente el primer zorro en llegar a la casilla
-  es el que debe quedarse en ella.
-
-  La solución es permitir el movimiento a celdas ya ocupadas en next_grid
-  y dejar que el criterio de desempate deje vivo al zorro más óptimo.
-  */
+  // 1. En next_grid no debe haber entidad (ni roca ni conejo tras su fase de movimiento)
+  if ((*(this->next_grid))[y][x] != nullptr) {
+    return false;
+  }
+  // 2. En grid no debe haber habido un zorro al inicio del turno (movimiento simultáneo de zorros)
   Entity *curr = (*(this->grid))[y][x];
-  return (curr == nullptr);
+  if (curr != nullptr && curr->type == EntityType::FOX) {
+    return false;
+  }
+  return true;
 }
 
 bool Simulator::isMoveable(std::size_t x, std::size_t y) {
