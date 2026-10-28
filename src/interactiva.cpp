@@ -60,7 +60,8 @@ std::unique_ptr<Simulator> CreateUVASimulator(std::size_t &gridW,
     e->proc_age = 0;
     e->starve_age = 0;
     e->is_alive = true;
-    e->is_new = false;
+    e->just_ate = false;
+    // e->is_new = false;
     entities.push_back(std::move(e));
     positions.push_back({col, row});
   };
@@ -80,13 +81,12 @@ std::unique_ptr<Simulator> CreateUVASimulator(std::size_t &gridW,
                                      positions);
 }
 
-// Inicializar un ecosistema aleatorio mediano (20x20) para apreciar ciclos Lotka-Volterra
-std::unique_ptr<Simulator> CreateRandomSimulator(std::size_t w, std::size_t h,
-                                                 int numRocks, int numRabbits,
-                                                 int numFoxes,
-                                                 uint32_t procRabbits,
-                                                 uint32_t procFoxes,
-                                                 uint32_t foodFoxes) {
+// Inicializar un ecosistema aleatorio mediano (20x20) para apreciar ciclos
+// Lotka-Volterra
+std::unique_ptr<Simulator>
+CreateRandomSimulator(std::size_t w, std::size_t h, int numRocks,
+                      int numRabbits, int numFoxes, uint32_t procRabbits,
+                      uint32_t procFoxes, uint32_t foodFoxes) {
   std::vector<std::unique_ptr<Entity>> entities;
   std::vector<std::pair<std::size_t, std::size_t>> positions;
 
@@ -112,7 +112,8 @@ std::unique_ptr<Simulator> CreateRandomSimulator(std::size_t w, std::size_t h,
       e->proc_age = 0;
       e->starve_age = 0;
       e->is_alive = true;
-      e->is_new = false;
+      e->just_ate = false;
+      // e->is_new = false;
       positions.push_back(allCells[idx]);
       entities.push_back(std::move(e));
     }
@@ -413,11 +414,11 @@ int main() {
     // Dibujar curvas de población
     if (popHistory.size() >= 2) {
       for (size_t i = 0; i < popHistory.size() - 1; ++i) {
-        float x1 = chartRect.x +
-                   ((float)i / (float)(popHistory.size() - 1)) * chartRect.width;
-        float x2 = chartRect.x + ((float)(i + 1) /
-                                  (float)(popHistory.size() - 1)) *
+        float x1 = chartRect.x + ((float)i / (float)(popHistory.size() - 1)) *
                                      chartRect.width;
+        float x2 =
+            chartRect.x +
+            ((float)(i + 1) / (float)(popHistory.size() - 1)) * chartRect.width;
 
         float yr1 = chartRect.y + chartRect.height -
                     ((float)popHistory[i].rabbits / (float)maxPop) *
