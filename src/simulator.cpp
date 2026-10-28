@@ -248,21 +248,15 @@ void Simulator::update() {
     }
   }
 
-  // 2.6. Envejecimiento y procreación de conejos sobrevivientes
+  // 2.6. Envejecimiento y procreación de conejos (incluye procreación si se movieron aunque mueran en conflicto)
   std::vector<Entity *> new_rabbits;
   for (size_t i = 0; i < move_rabbits.size(); i++) {
     Entity *rabbit = move_rabbits[i];
-    if (!rabbit->is_alive) {
-      continue;
-    }
 
     size_t prev_x = rabbit_prev_positions[i].first;
     size_t prev_y = rabbit_prev_positions[i].second;
     size_t new_x = rabbit_new_positions[i].first;
     size_t new_y = rabbit_new_positions[i].second;
-
-    rabbit->x = new_x;
-    rabbit->y = new_y;
 
     bool didMove = (prev_x != new_x || prev_y != new_y);
     if (rabbit->proc_age >= GEN_PROC_RABBITS && didMove) {
@@ -282,8 +276,13 @@ void Simulator::update() {
       this->count_rabbit++;
       this->next_grid->addEntity(this->entities.back().get(),
                                  std::make_pair(prev_x, prev_y));
-    } else {
+    } else if (rabbit->is_alive) {
       rabbit->proc_age++;
+    }
+
+    if (rabbit->is_alive) {
+      rabbit->x = new_x;
+      rabbit->y = new_y;
     }
   }
 
@@ -369,27 +368,15 @@ void Simulator::update() {
     }
   }
 
-  // 3.6. Hambre, procreación y envejecimiento de zorros sobrevivientes
+  // 3.6. Hambre, procreación y envejecimiento de zorros (incluye procreación si se movieron aunque mueran en conflicto)
   std::vector<Entity *> new_foxes;
   for (size_t i = 0; i < move_foxes.size(); i++) {
     Entity *fox = move_foxes[i];
-    if (!fox->is_alive) {
-      continue;
-    }
 
     size_t prev_x = fox_prev_positions[i].first;
     size_t prev_y = fox_prev_positions[i].second;
     size_t new_x = fox_new_positions[i].first;
     size_t new_y = fox_new_positions[i].second;
-
-    fox->x = new_x;
-    fox->y = new_y;
-
-    if (fox->just_ate) {
-      fox->starve_age = 0;
-    } else {
-      fox->starve_age++;
-    }
 
     bool didMove = (prev_x != new_x || prev_y != new_y);
     if (fox->proc_age >= GEN_PROC_FOXES && didMove) {
@@ -409,8 +396,19 @@ void Simulator::update() {
       this->count_fox++;
       this->next_grid->addEntity(this->entities.back().get(),
                                  std::make_pair(prev_x, prev_y));
-    } else {
+    } else if (fox->is_alive) {
       fox->proc_age++;
+    }
+
+    if (fox->is_alive) {
+      fox->x = new_x;
+      fox->y = new_y;
+
+      if (fox->just_ate) {
+        fox->starve_age = 0;
+      } else {
+        fox->starve_age++;
+      }
     }
   }
 
