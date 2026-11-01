@@ -12,6 +12,9 @@ include_directories(src)
 include_directories(raylib/include)
 link_directories(raylib/lib)
 
+# Soporte para Pthreads (POSIX Threads)
+find_package(Threads REQUIRED)
+
 # Fuentes comunes del núcleo de simulación
 set(CORE_SOURCES
     src/simulator.cpp
@@ -23,10 +26,11 @@ add_executable(mp3_paralela
     src/main.cpp
     ${CORE_SOURCES}
 )
+target_link_libraries(mp3_paralela PRIVATE Threads::Threads)
 
 # 2. Ejecutable gráfico interactivo con Raylib
 add_executable(interactiva
     src/interactiva.cpp
     ${CORE_SOURCES}
 )
-target_link_libraries(interactiva PRIVATE raylib opengl32 gdi32 winmm)
+target_link_libraries(interactiva PRIVATE Threads::Threads raylib opengl32 gdi32 winmm)

@@ -1,5 +1,6 @@
 #include "simulator.h"
 #include "entity.h"
+#include <algorithm>
 #include <utility>
 
 Simulator::Simulator(
@@ -43,11 +44,66 @@ Simulator::Simulator(
       break;
     }
   }
+
+  this->initThreadPool(height);
 }
 
 Simulator::~Simulator() {
+  this->cleanupThreadPool();
   delete this->grid;
   delete this->next_grid;
+}
+
+void Simulator::initThreadPool(std::size_t height) {
+  this->stop_simulation = false;
+
+  this->start_barrier.init(NUM_THREADS + 1);
+  this->step_barrier.init(NUM_THREADS);
+  this->done_barrier.init(NUM_THREADS + 1);
+
+  this->row_mutexes = new pthread_mutex_t[height];
+  for (std::size_t y = 0; y < height; ++y) {
+    pthread_mutex_init(&this->row_mutexes[y], nullptr);
+  }
+
+  this->workers = new pthread_t[NUM_THREADS];
+  this->worker_contexts = new WorkerContext[NUM_THREADS];
+
+  for (std::size_t t = 0; t < NUM_THREADS; ++t) {
+    this->worker_contexts[t].thread_id = t;
+    this->worker_contexts[t].sim = this;
+    pthread_create(&this->workers[t], nullptr, Simulator::workerRoutine,
+                   &this->worker_contexts[t]);
+  }
+}
+
+void Simulator::cleanupThreadPool() {
+  if (this->workers != nullptr) {
+    this->stop_simulation = true;
+    this->start_barrier.wait();
+
+    for (std::size_t t = 0; t < NUM_THREADS; ++t) {
+      pthread_join(this->workers[t], nullptr);
+    }
+    delete[] this->workers;
+    this->workers = nullptr;
+
+    delete[] this->worker_contexts;
+    this->worker_contexts = nullptr;
+
+    this->start_barrier.destroy();
+    this->step_barrier.destroy();
+    this->done_barrier.destroy();
+  }
+
+  if (this->row_mutexes != nullptr) {
+    std::size_t h = this->grid != nullptr ? this->grid->getHeight() : 0;
+    for (std::size_t y = 0; y < h; ++y) {
+      pthread_mutex_destroy(&this->row_mutexes[y]);
+    }
+    delete[] this->row_mutexes;
+    this->row_mutexes = nullptr;
+  }
 }
 
 bool Simulator::isEmpty(std::size_t x, std::size_t y) {
@@ -147,9 +203,9 @@ Simulator::getEmptyMovesForFox(std::size_t x, std::size_t y) {
 
 std::vector<std::pair<std::size_t, std::size_t>>
 Simulator::getPossibleMovesFox(std::size_t x, std::size_t y) {
-  auto rabbits = getRabbitMovesForFox(x, y);
-  if (!rabbits.empty()) {
-    return rabbits;
+  auto rabbits_adj = getRabbitMovesForFox(x, y);
+  if (!rabbits_adj.empty()) {
+    return rabbits_adj;
   }
   return getEmptyMovesForFox(x, y);
 }
@@ -173,7 +229,6 @@ std::pair<std::size_t, std::size_t> Simulator::selectDisplacement(
     std::uint32_t g, std::size_t x, std::size_t y,
     const std::vector<std::pair<std::size_t, std::size_t>> &possible_moves) {
   std::size_t pos = (g + x + y) % possible_moves.size();
-
   return possible_moves[pos];
 }
 
@@ -188,94 +243,97 @@ std::pair<std::size_t, std::size_t> Simulator::chooseAdjCell(std::size_t x,
   return this->selectDisplacement(this->step, x, y, possible_moves);
 }
 
-// Update at each simulation step
-// SECUENTIAL VERSION
+// -------------------------------------------------------------
+// Fases Concurrentes ejecutadas por los hilos de trabajo
+// -------------------------------------------------------------
 
-void Simulator::update() {
-  size_t h = this->grid->getHeight();
-  size_t w = this->grid->getWidth();
+void Simulator::computeRabbitMoves(WorkerContext *ctx) {
+  std::size_t total = this->rabbits.size();
+  std::size_t start = (ctx->thread_id * total) / NUM_THREADS;
+  std::size_t end = ((ctx->thread_id + 1) * total) / NUM_THREADS;
 
-  // 1. Colocar las rocas en next_grid
-  for (auto &rock : this->rocks) {
-    this->next_grid->addEntity(rock, std::make_pair(rock->x, rock->y));
-  }
-
-  // 2. Mover los conejos
-  std::vector<Entity *> move_rabbits;
-  std::vector<std::pair<std::size_t, std::size_t>> rabbit_prev_positions;
-  std::vector<std::pair<std::size_t, std::size_t>> rabbit_new_positions;
-  for (auto &rabbit : this->rabbits) {
+  for (std::size_t i = start; i < end; ++i) {
+    Entity *rabbit = this->rabbits[i];
     if (!rabbit->is_alive) {
       continue;
     }
 
-    size_t prev_x = rabbit->x;
-    size_t prev_y = rabbit->y;
+    std::size_t prev_x = rabbit->x;
+    std::size_t prev_y = rabbit->y;
 
-    std::vector<std::pair<std::size_t, std::size_t>> possible_moves =
-        getPossibleMovesRabbit(rabbit->x, rabbit->y);
+    auto possible_moves = this->getPossibleMovesRabbit(prev_x, prev_y);
 
     std::pair<std::size_t, std::size_t> new_pos;
     if (possible_moves.empty()) {
       new_pos = std::make_pair(prev_x, prev_y);
     } else {
-      new_pos =
-          selectDisplacement(this->step, rabbit->x, rabbit->y, possible_moves);
+      new_pos = this->selectDisplacement(this->step, prev_x, prev_y, possible_moves);
     }
-    move_rabbits.push_back(rabbit);
-    rabbit_prev_positions.push_back(std::make_pair(prev_x, prev_y));
-    rabbit_new_positions.push_back(new_pos);
-  }
 
-  // 2.5. Procesar conflictos entre conejos (solo arbitraje, sin modificar proc_age)
-  for (size_t i = 0; i < move_rabbits.size(); i++) {
-    Entity *rabbit = move_rabbits[i];
-    std::pair<std::size_t, std::size_t> new_pos = rabbit_new_positions[i];
+    ctx->planned_rabbits.push_back(rabbit);
+    ctx->rabbit_prev_pos.push_back(std::make_pair(prev_x, prev_y));
+    ctx->rabbit_new_pos.push_back(new_pos);
+  }
+}
+
+void Simulator::resolveRabbitConflicts(WorkerContext *ctx) {
+  for (std::size_t i = 0; i < ctx->planned_rabbits.size(); ++i) {
+    Entity *rabbit = ctx->planned_rabbits[i];
+    auto new_pos = ctx->rabbit_new_pos[i];
+    std::size_t row = new_pos.second;
+
+    pthread_mutex_lock(&this->row_mutexes[row]);
 
     Entity *occupant = (*(this->next_grid))[new_pos.second][new_pos.first];
     if (occupant == nullptr) {
       this->next_grid->addEntity(rabbit, new_pos);
     } else if (occupant->type == EntityType::RABBIT) {
-      // Conflicto de conejos: el de mayor proc_age sobrevive
-      if (rabbit->proc_age > occupant->proc_age) {
+      // Conflicto de conejos: el de mayor proc_age sobrevive.
+      // Desempate determinista por ID si empatan en proc_age.
+      bool rabbit_wins = (rabbit->proc_age > occupant->proc_age) ||
+                         (rabbit->proc_age == occupant->proc_age && rabbit->id < occupant->id);
+      if (rabbit_wins) {
         occupant->is_alive = false;
-        count_rabbit--;
+        ctx->dead_rabbits++;
         this->next_grid->addEntity(rabbit, new_pos);
       } else {
         rabbit->is_alive = false;
-        count_rabbit--;
+        ctx->dead_rabbits++;
       }
     }
+
+    pthread_mutex_unlock(&this->row_mutexes[row]);
   }
+}
 
-  // 2.6. Envejecimiento y procreación de conejos (incluye procreación si se movieron aunque mueran en conflicto)
-  std::vector<Entity *> new_rabbits;
-  for (size_t i = 0; i < move_rabbits.size(); i++) {
-    Entity *rabbit = move_rabbits[i];
-
-    size_t prev_x = rabbit_prev_positions[i].first;
-    size_t prev_y = rabbit_prev_positions[i].second;
-    size_t new_x = rabbit_new_positions[i].first;
-    size_t new_y = rabbit_new_positions[i].second;
+void Simulator::rabbitAgingAndProcreation(WorkerContext *ctx) {
+  for (std::size_t i = 0; i < ctx->planned_rabbits.size(); ++i) {
+    Entity *rabbit = ctx->planned_rabbits[i];
+    std::size_t prev_x = ctx->rabbit_prev_pos[i].first;
+    std::size_t prev_y = ctx->rabbit_prev_pos[i].second;
+    std::size_t new_x = ctx->rabbit_new_pos[i].first;
+    std::size_t new_y = ctx->rabbit_new_pos[i].second;
 
     bool didMove = (prev_x != new_x || prev_y != new_y);
-    if (rabbit->proc_age >= GEN_PROC_RABBITS && didMove) {
+    if (rabbit->proc_age >= this->GEN_PROC_RABBITS && didMove) {
       rabbit->proc_age = 0;
 
-      std::unique_ptr<Entity> child = std::make_unique<Entity>();
+      auto child = std::make_unique<Entity>();
       child->type = EntityType::RABBIT;
-      child->id = this->entities.size();
+      child->id = 0; // Se asignará ordenadamente al consolidar
       child->x = prev_x;
       child->y = prev_y;
       child->proc_age = 0;
       child->starve_age = 0;
       child->is_alive = true;
       child->just_ate = false;
-      this->entities.push_back(std::move(child));
-      new_rabbits.push_back(this->entities.back().get());
-      this->count_rabbit++;
-      this->next_grid->addEntity(this->entities.back().get(),
-                                 std::make_pair(prev_x, prev_y));
+
+      pthread_mutex_lock(&this->row_mutexes[prev_y]);
+      this->next_grid->addEntity(child.get(), std::make_pair(prev_x, prev_y));
+      pthread_mutex_unlock(&this->row_mutexes[prev_y]);
+
+      ctx->local_new_rabbits.push_back(child.get());
+      ctx->local_new_entities.push_back(std::move(child));
     } else if (rabbit->is_alive) {
       rabbit->proc_age++;
     }
@@ -285,59 +343,58 @@ void Simulator::update() {
       rabbit->y = new_y;
     }
   }
+}
 
-  this->rabbits.insert(this->rabbits.end(), new_rabbits.begin(),
-                       new_rabbits.end());
+void Simulator::computeFoxMoves(WorkerContext *ctx) {
+  std::size_t total = this->foxes.size();
+  std::size_t start = (ctx->thread_id * total) / NUM_THREADS;
+  std::size_t end = ((ctx->thread_id + 1) * total) / NUM_THREADS;
 
-  // 3. Mover los zorros
-  std::vector<Entity *> move_foxes;
-  std::vector<std::pair<std::size_t, std::size_t>> fox_prev_positions;
-  std::vector<std::pair<std::size_t, std::size_t>> fox_new_positions;
-  for (auto &fox : this->foxes) {
+  for (std::size_t i = start; i < end; ++i) {
+    Entity *fox = this->foxes[i];
     if (!fox->is_alive) {
       continue;
     }
-    size_t prev_x = fox->x;
-    size_t prev_y = fox->y;
+    std::size_t prev_x = fox->x;
+    std::size_t prev_y = fox->y;
     fox->just_ate = false;
 
     // A. Buscar conejos adyacentes en next_grid
-    std::vector<std::pair<std::size_t, std::size_t>> rabbit_moves =
-        getRabbitMovesForFox(fox->x, fox->y);
-
+    auto rabbit_moves = this->getRabbitMovesForFox(fox->x, fox->y);
     std::pair<std::size_t, std::size_t> new_pos;
 
     if (!rabbit_moves.empty()) {
-      new_pos = selectDisplacement(this->step, fox->x, fox->y, rabbit_moves);
+      new_pos = this->selectDisplacement(this->step, fox->x, fox->y, rabbit_moves);
     } else {
-      // Regla de inanición: al no encontrar conejo para comer en este turno, si
-      // alcanza GEN_FOOD_FOXES muere antes de buscar vacías
-      if (fox->starve_age + 1 >= GEN_FOOD_FOXES) {
+      // Regla de inanición
+      if (fox->starve_age + 1 >= this->GEN_FOOD_FOXES) {
         fox->is_alive = false;
-        count_fox--;
+        ctx->dead_foxes++;
         fox->starve_age++;
         continue;
       }
 
-      std::vector<std::pair<std::size_t, std::size_t>> empty_moves =
-          getEmptyMovesForFox(fox->x, fox->y);
-
+      auto empty_moves = this->getEmptyMovesForFox(fox->x, fox->y);
       if (empty_moves.empty()) {
         new_pos = std::make_pair(prev_x, prev_y);
       } else {
-        new_pos = selectDisplacement(this->step, fox->x, fox->y, empty_moves);
+        new_pos = this->selectDisplacement(this->step, fox->x, fox->y, empty_moves);
       }
     }
 
-    move_foxes.push_back(fox);
-    fox_prev_positions.push_back(std::make_pair(prev_x, prev_y));
-    fox_new_positions.push_back(new_pos);
+    ctx->planned_foxes.push_back(fox);
+    ctx->fox_prev_pos.push_back(std::make_pair(prev_x, prev_y));
+    ctx->fox_new_pos.push_back(new_pos);
   }
+}
 
-  // 3.5. Resolver conflictos entre zorros (solo arbitraje, sin modificar starve_age ni proc_age)
-  for (size_t i = 0; i < move_foxes.size(); i++) {
-    Entity *fox = move_foxes[i];
-    std::pair<std::size_t, std::size_t> new_pos = fox_new_positions[i];
+void Simulator::resolveFoxConflicts(WorkerContext *ctx) {
+  for (std::size_t i = 0; i < ctx->planned_foxes.size(); ++i) {
+    Entity *fox = ctx->planned_foxes[i];
+    auto new_pos = ctx->fox_new_pos[i];
+    std::size_t row = new_pos.second;
+
+    pthread_mutex_lock(&this->row_mutexes[row]);
 
     Entity *occupant = (*(this->next_grid))[new_pos.second][new_pos.first];
     if (occupant == nullptr) {
@@ -345,57 +402,64 @@ void Simulator::update() {
       fox->just_ate = false;
     } else if (occupant->type == EntityType::RABBIT) {
       occupant->is_alive = false;
-      count_rabbit--;
+      ctx->eaten_rabbits++;
       this->next_grid->addEntity(fox, new_pos);
       fox->just_ate = true;
     } else if (occupant->type == EntityType::FOX) {
-      // Conflicto de zorros: mayor proc_age, o menor starve_age si empatan
+      // Conflicto de zorros: mayor proc_age, luego menor starve_age.
+      // Desempate determinista por ID si empatan en ambos.
       bool fox_wins = (fox->proc_age > occupant->proc_age) ||
                       (fox->proc_age == occupant->proc_age &&
-                       fox->starve_age < occupant->starve_age);
+                       fox->starve_age < occupant->starve_age) ||
+                      (fox->proc_age == occupant->proc_age &&
+                       fox->starve_age == occupant->starve_age &&
+                       fox->id < occupant->id);
 
       if (fox_wins) {
         occupant->is_alive = false;
-        count_fox--;
+        ctx->dead_foxes++;
         if (occupant->just_ate) {
           fox->just_ate = true;
         }
         this->next_grid->addEntity(fox, new_pos);
       } else {
         fox->is_alive = false;
-        count_fox--;
+        ctx->dead_foxes++;
       }
     }
+
+    pthread_mutex_unlock(&this->row_mutexes[row]);
   }
+}
 
-  // 3.6. Hambre, procreación y envejecimiento de zorros (incluye procreación si se movieron aunque mueran en conflicto)
-  std::vector<Entity *> new_foxes;
-  for (size_t i = 0; i < move_foxes.size(); i++) {
-    Entity *fox = move_foxes[i];
-
-    size_t prev_x = fox_prev_positions[i].first;
-    size_t prev_y = fox_prev_positions[i].second;
-    size_t new_x = fox_new_positions[i].first;
-    size_t new_y = fox_new_positions[i].second;
+void Simulator::foxAgingAndProcreation(WorkerContext *ctx) {
+  for (std::size_t i = 0; i < ctx->planned_foxes.size(); ++i) {
+    Entity *fox = ctx->planned_foxes[i];
+    std::size_t prev_x = ctx->fox_prev_pos[i].first;
+    std::size_t prev_y = ctx->fox_prev_pos[i].second;
+    std::size_t new_x = ctx->fox_new_pos[i].first;
+    std::size_t new_y = ctx->fox_new_pos[i].second;
 
     bool didMove = (prev_x != new_x || prev_y != new_y);
-    if (fox->proc_age >= GEN_PROC_FOXES && didMove) {
+    if (fox->proc_age >= this->GEN_PROC_FOXES && didMove) {
       fox->proc_age = 0;
 
-      std::unique_ptr<Entity> child = std::make_unique<Entity>();
+      auto child = std::make_unique<Entity>();
       child->type = EntityType::FOX;
-      child->id = this->entities.size();
+      child->id = 0; // Se asignará ordenadamente al consolidar
       child->x = prev_x;
       child->y = prev_y;
       child->proc_age = 0;
       child->starve_age = 0;
       child->is_alive = true;
       child->just_ate = false;
-      this->entities.push_back(std::move(child));
-      new_foxes.push_back(this->entities.back().get());
-      this->count_fox++;
-      this->next_grid->addEntity(this->entities.back().get(),
-                                 std::make_pair(prev_x, prev_y));
+
+      pthread_mutex_lock(&this->row_mutexes[prev_y]);
+      this->next_grid->addEntity(child.get(), std::make_pair(prev_x, prev_y));
+      pthread_mutex_unlock(&this->row_mutexes[prev_y]);
+
+      ctx->local_new_foxes.push_back(child.get());
+      ctx->local_new_entities.push_back(std::move(child));
     } else if (fox->is_alive) {
       fox->proc_age++;
     }
@@ -411,9 +475,99 @@ void Simulator::update() {
       }
     }
   }
+}
 
-  this->foxes.insert(this->foxes.end(), new_foxes.begin(), new_foxes.end());
+// -------------------------------------------------------------
+// Rutina del Hilo de Trabajo (Worker Thread Loop)
+// -------------------------------------------------------------
 
+void *Simulator::workerRoutine(void *arg) {
+  WorkerContext *ctx = static_cast<WorkerContext *>(arg);
+  Simulator *sim = ctx->sim;
+
+  while (true) {
+    // 1. Esperar señal de inicio de generación del hilo principal
+    sim->start_barrier.wait();
+    if (sim->stop_simulation) {
+      break;
+    }
+
+    // 2. Fase de conejos: cálculo de movimientos
+    sim->computeRabbitMoves(ctx);
+    sim->step_barrier.wait();
+
+    // 3. Fase de conejos: arbitraje de conflictos en next_grid
+    sim->resolveRabbitConflicts(ctx);
+    sim->step_barrier.wait();
+
+    // 4. Fase de conejos: envejecimiento y procreación
+    sim->rabbitAgingAndProcreation(ctx);
+    sim->step_barrier.wait();
+
+    // 5. Fase de zorros: cálculo de movimientos e inanición
+    sim->computeFoxMoves(ctx);
+    sim->step_barrier.wait();
+
+    // 6. Fase de zorros: arbitraje y depredación
+    sim->resolveFoxConflicts(ctx);
+    sim->step_barrier.wait();
+
+    // 7. Fase de zorros: envejecimiento y procreación
+    sim->foxAgingAndProcreation(ctx);
+    sim->step_barrier.wait();
+
+    // 8. Notificar al hilo principal que este worker ha finalizado su ciclo
+    sim->done_barrier.wait();
+  }
+
+  return nullptr;
+}
+
+// -------------------------------------------------------------
+// Update paralelizado con Pthreads (Llamado por el hilo principal)
+// -------------------------------------------------------------
+
+void Simulator::update() {
+  size_t h = this->grid->getHeight();
+  size_t w = this->grid->getWidth();
+
+  // 1. Colocar las rocas en next_grid
+  for (auto &rock : this->rocks) {
+    this->next_grid->addEntity(rock, std::make_pair(rock->x, rock->y));
+  }
+
+  // 2. Limpiar buffers y estadísticas locales de cada hilo
+  for (std::size_t t = 0; t < NUM_THREADS; ++t) {
+    this->worker_contexts[t].reset();
+  }
+
+  // 3. Despertar a los hilos de trabajo para ejecutar las fases concurrentes
+  this->start_barrier.wait();
+
+  // 4. Esperar a que todos los hilos completen sus fases
+  this->done_barrier.wait();
+
+  // 5. Consolidar entidades recién nacidas y actualizar contadores
+  for (std::size_t t = 0; t < NUM_THREADS; ++t) {
+    auto &ctx = this->worker_contexts[t];
+
+    this->count_rabbit -= (ctx.dead_rabbits + ctx.eaten_rabbits);
+    this->count_rabbit += ctx.local_new_rabbits.size();
+
+    this->count_fox -= ctx.dead_foxes;
+    this->count_fox += ctx.local_new_foxes.size();
+
+    for (auto &child : ctx.local_new_entities) {
+      child->id = static_cast<std::uint32_t>(this->entities.size());
+      this->entities.push_back(std::move(child));
+    }
+    this->rabbits.insert(this->rabbits.end(), ctx.local_new_rabbits.begin(),
+                         ctx.local_new_rabbits.end());
+    this->foxes.insert(this->foxes.end(), ctx.local_new_foxes.begin(),
+                       ctx.local_new_foxes.end());
+  }
+
+  // 6. Intercambiar grillas y avanzar paso de simulación
   delete this->grid;
   this->grid = this->next_grid;
   this->next_grid = new Grid(w, h);
