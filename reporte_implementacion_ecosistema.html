@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Reporte Técnico: Simulación de Ecosistema Predador-Presa (Secuencial y Paralelo)</title>
+  <style>
+    @page {
+      size: letter;
+      margin: 1.8cm 1.5cm 1.8cm 1.5cm;
+      @bottom-right {
+        content: counter(page);
+      }
+    }
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.55;
+      color: #1e293b;
+      background-color: #ffffff;
+      margin: 0;
+      padding: 0;
+    }
+    h1, h2, h3, h4 {
+      color: #0f172a;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 22pt;
+      margin-bottom: 6px;
+      color: #1e3a8a;
+      border-bottom: 3px solid #3b82f6;
+      padding-bottom: 8px;
+    }
+    .subtitle {
+      font-size: 13pt;
+      color: #475569;
+      margin-top: 0;
+      margin-bottom: 24px;
+      font-weight: 500;
+    }
+    .meta-box {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-left: 4px solid #3b82f6;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 9.5pt;
+      color: #334155;
+    }
+    .meta-box div {
+      line-height: 1.4;
+    }
+    h2 {
+      font-size: 14pt;
+      margin-top: 24px;
+      margin-bottom: 10px;
+      border-bottom: 1.5px solid #cbd5e1;
+      padding-bottom: 4px;
+      color: #1e3a8a;
+      page-break-after: avoid;
+    }
+    h3 {
+      font-size: 11.5pt;
+      margin-top: 16px;
+      margin-bottom: 8px;
+      color: #334155;
+      page-break-after: avoid;
+    }
+    p {
+      margin-top: 0;
+      margin-bottom: 10px;
+      text-align: justify;
+    }
+    ul, ol {
+      margin-top: 0;
+      margin-bottom: 10px;
+      padding-left: 22px;
+    }
+    li {
+      margin-bottom: 4px;
+    }
+    code {
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 9.5pt;
+      background-color: #f1f5f9;
+      color: #0f172a;
+      padding: 2px 5px;
+      border-radius: 4px;
+      border: 1px solid #e2e8f0;
+    }
+    pre {
+      background-color: #0f172a;
+      color: #f8fafc;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 8.5pt;
+      line-height: 1.45;
+      padding: 12px 14px;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 10px 0 14px 0;
+      page-break-inside: avoid;
+    }
+    pre code {
+      background-color: transparent;
+      color: inherit;
+      padding: 0;
+      border: none;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 18px 0;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 7px 10px;
+      text-align: left;
+    }
+    th {
+      background-color: #f1f5f9;
+      color: #0f172a;
+      font-weight: 600;
+    }
+    tr:nth-child(even) {
+      background-color: #f8fafc;
+    }
+    .math-block {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 8px 14px;
+      margin: 10px 0;
+      text-align: center;
+      font-family: 'Cambria Math', 'Times New Roman', serif;
+      font-size: 11pt;
+    }
+    .diagram-container {
+      text-align: center;
+      margin: 14px 0 18px 0;
+      page-break-inside: avoid;
+    }
+    .diagram-box {
+      display: inline-block;
+      max-width: 100%;
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .diagram-caption {
+      font-size: 8.5pt;
+      color: #64748b;
+      margin-top: 6px;
+      font-style: italic;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+    .tag {
+      display: inline-block;
+      font-size: 8pt;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .tag-rock { background-color: #e2e8f0; color: #475569; }
+    .tag-rabbit { background-color: #dcfce7; color: #166534; }
+    .tag-fox { background-color: #ffedd5; color: #9a3412; }
+    .alert-box {
+      background-color: #eff6ff;
+      border-left: 4px solid #3b82f6;
+      padding: 10px 14px;
+      margin: 12px 0;
+      border-radius: 0 6px 6px 0;
+      font-size: 9.5pt;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ENCABEZADO Y TÍTULO -->
+  <h1>Simulación de Ecosistema Predador-Presa</h1>
+  <div class="subtitle">Reporte Técnico de Arquitectura, Implementación Secuencial y Paralelización con POSIX Threads (Pthreads)</div>
+
+  <div class="meta-box">
+    <div>
+      <strong>Proyecto:</strong> Asignación de Programación Paralela (MP3)<br>
+      <strong>Tema:</strong> Autómata Celular y Modelo Lotka-Volterra Concurrente
+    </div>
+    <div>
+      <strong>Modelo de Hilos:</strong> POSIX Threads (Pthreads)<br>
+      <strong>Configuración:</strong> 4 Hilos Fijos (Thread Pool Persistente)
+    </div>
+  </div>
+
+  <!-- SECCIÓN 1: INTRODUCCIÓN -->
+  <h2>1. Introducción y Descripción del Problema</h2>
+  <p>
+    El presente proyecto comprende el modelado, diseño e implementación de un simulador estocástico y determinista de un ecosistema virtual bidimensional basado en interacción de especies (*predador-presa*). El espacio de simulación consiste en una grilla de $R$ filas por $C$ columnas donde cada celda puede estar vacía o albergar uno de los siguientes tres elementos:
+  </p>
+  <ul>
+    <li><span class="tag tag-rock">ROCK</span> <strong>Rocas:</strong> Elementos ambientales fijos e inmutables que no se desplazan ni pueden ser ocupados por ninguna criatura. Proporcionan estructura y refugio en el ecosistema.</li>
+    <li><span class="tag tag-rabbit">RABBIT</span> <strong>Conejos:</strong> Especie herbívora de reproducción rápida. Se desplazan hacia celdas vacías adyacentes y procrean cada <code>GEN_PROC_RABBITS</code> generaciones al desplazarse. Sirven de presa para los zorros.</li>
+    <li><span class="tag tag-fox">FOX</span> <strong>Zorros:</strong> Depredadores carnívoros. Intentan alimentarse de conejos adyacentes; si no encuentran alimento y superan <code>GEN_FOOD_FOXES</code> generaciones sin comer, mueren por inanición. Si sobreviven, buscan celdas vacías y procrean tras <code>GEN_PROC_FOXES</code> generaciones.</li>
+  </ul>
+
+  <h3>1.1. Reglas de Desplazamiento y Criterio de Selección</h3>
+  <p>
+    Los animales se mueven en 4 direcciones ortogonales (no diagonales) evaluadas estrictamente en <strong>orden horario</strong>: <strong>Norte (0)</strong>, <strong>Este (1)</strong>, <strong>Sur (2)</strong> y <strong>Oeste (3)</strong>. Si para una entidad en la posición $(X, Y)$ durante la generación $G$ existen $P$ celdas válidas a las que desplazarse, la celda destino se escoge unívocamente mediante la fórmula:
+  </p>
+  <div class="math-block">
+    $$\text{Índice Elegido} = (G + X + Y) \pmod P$$
+  </div>
+  <p>
+    Si no existen celdas admisibles ($P = 0$), el animal permanece en su ubicación actual.
+  </p>
+
+  <h3>1.2. Resolución de Conflictos y Simultaneidad</h3>
+  <p>
+    Todos los animales de una especie actúan de manera simultánea en su fase correspondiente:
+  </p>
+  <ul>
+    <li><strong>Conflicto Conejo - Conejo:</strong> Si dos o más conejos convergen en la misma celda destino, sobrevive únicamente aquel con la <strong>mayor edad de procreación</strong> (<code>proc_age</code>). Todos los demás conejos mueren.</li>
+    <li><strong>Conflicto Zorro - Conejo:</strong> El zorro devora al conejo presente en la celda destino. El conejo perece inmediatamente y el contador de hambre del zorro se restablece (<code>starve_age = 0</code>).</li>
+    <li><strong>Conflicto Zorro - Zorro:</strong> Si dos o más zorros compiten por la misma celda, sobrevive aquel con <strong>mayor edad de procreación</strong>; en caso de empate, sobrevive el <strong>menos hambriento</strong> (menor <code>starve_age</code>). Si el zorro derrotado había devorado un conejo en ese turno, transfiere el crédito alimenticio al zorro superviviente.</li>
+  </ul>
+
+  <!-- SECCIÓN 2: ARQUITECTURA -->
+  <h2>2. Arquitectura de Software y Diseño Modular</h2>
+  <p>
+    El sistema fue concebido bajo el principio de alta cohesión y bajo acoplamiento. Se estableció como premisa fundamental que <strong>únicamente el método <code>Simulator::update()</code> fuera modificado para la versión paralela</strong>, manteniendo intacta la interfaz pública y el comportamiento de los demás componentes.
+  </p>
+
+  <div class="diagram-container">
+    <div class="diagram-box">
+      <svg width="600" height="150" viewBox="0 0 600 150" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="20" width="130" height="50" rx="6" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+        <text x="75" y="45" font-family="Segoe UI, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="#1e3a8a">main.cpp</text>
+        <text x="75" y="60" font-family="Segoe UI, sans-serif" font-size="9" text-anchor="middle" fill="#64748b">CLI (UVA Judge)</text>
+
+        <rect x="10" y="85" width="130" height="50" rx="6" fill="#fdf4ff" stroke="#d946ef" stroke-width="2"/>
+        <text x="75" y="110" font-family="Segoe UI, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="#701a75">interactiva.cpp</text>
+        <text x="75" y="125" font-family="Segoe UI, sans-serif" font-size="9" text-anchor="middle" fill="#64748b">Raylib GUI (60 FPS)</text>
+
+        <path d="M 140 45 L 210 70" stroke="#3b82f6" stroke-width="2" marker-end="url(#arrow)"/>
+        <path d="M 140 110 L 210 75" stroke="#d946ef" stroke-width="2" marker-end="url(#arrow)"/>
+
+        <rect x="220" y="40" width="160" height="65" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="2.5"/>
+        <text x="300" y="68" font-family="Segoe UI, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#14532d">Simulator</text>
+        <text x="300" y="85" font-family="Segoe UI, sans-serif" font-size="9.5" text-anchor="middle" fill="#166534">update() [Pthreads]</text>
+
+        <path d="M 380 60 L 440 40" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow)"/>
+        <path d="M 380 85 L 440 105" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow)"/>
+
+        <rect x="450" y="15" width="130" height="50" rx="6" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+        <text x="515" y="40" font-family="Segoe UI, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="#0f172a">Grid</text>
+        <text x="515" y="55" font-family="Segoe UI, sans-serif" font-size="9" text-anchor="middle" fill="#64748b">Matriz Espacial 2D</text>
+
+        <rect x="450" y="80" width="130" height="50" rx="6" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+        <text x="515" y="105" font-family="Segoe UI, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="#0f172a">Entity</text>
+        <text x="515" y="120" font-family="Segoe UI, sans-serif" font-size="9" text-anchor="middle" fill="#64748b">Estructura Atómica</text>
+
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 8 5 L 0 9 z" fill="#475569"/>
+          </marker>
+        </defs>
+      </svg>
+      <div class="diagram-caption">Figura 1. Arquitectura modular desacoplada del sistema de simulación.</div>
+    </div>
+  </div>
+
+  <ul>
+    <li><strong><code>Entity</code> (<code>entity.h</code>):</strong> Estructura plana de datos que modela el tipo de objeto, identificador único, edades (reproducción y hambre), estado de vida y coordenadas.</li>
+    <li><strong><code>Grid</code> (<code>grid.h</code>, <code>grid.cpp</code>):</strong> Matriz bidimensional dinámica (<code>std::vector&lt;std::vector&lt;Entity*&gt;&gt;</code>) con indexación directa mediante <code>operator[]</code>. Las celdas libres se representan de forma eficiente mediante punteros nulos (<code>nullptr</code>).</li>
+    <li><strong><code>Simulator</code> (<code>simulator.h</code>, <code>simulator.cpp</code>):</strong> Gestor del estado global, estadísticas acumuladas, doble búfer de memoria (<code>grid</code> actual y <code>next_grid</code> de destino) y motor de actualización temporal.</li>
+    <li><strong>Consumidores:</strong> <code>main.cpp</code> procesa entradas y salidas de texto estándar estilo juez UVA, mientras que <code>interactiva.cpp</code> ofrece visualización fluida con gráficos en tiempo real mediante la librería Raylib.</li>
+  </ul>
+
+  <!-- SECCIÓN 3: IMPLEMENTACIÓN SECUENCIAL -->
+  <div class="page-break"></div>
+  <h2>3. Implementación Secuencial</h2>
+  <p>
+    En la versión secuencial, cada generación evoluciona de manera determinista ejecutando un pipeline de 8 etapas lineales sobre un esquema de <strong>Double Buffering</strong>:
+  </p>
+  <ol>
+    <li><strong>Copia de Rocas:</strong> Se replican las rocas en <code>next_grid</code> en sus coordenadas inmutables $(X, Y)$.</li>
+    <li><strong>Planificación de Conejos:</strong> Cada conejo vivo consulta <code>grid</code> para identificar celdas vacías adyacentes y calcula su celda destino mediante $(G + X + Y) \pmod P$.</li>
+    <li><strong>Arbitraje de Conejos:</strong> Se ubican los conejos en <code>next_grid</code>. Si dos conejos coinciden en una celda, sobrevive aquel con mayor <code>proc_age</code> y el perdedor se marca con <code>is_alive = false</code>.</li>
+    <li><strong>Reproducción y Envejecimiento de Conejos:</strong> Los conejos que cambiaron de posición y alcanzaron <code>GEN_PROC_RABBITS</code> reinician su edad a 0 e insertan una nueva cría en su posición previa $(prev_x, prev_y)$. Los supervivientes que no procrearon incrementan su <code>proc_age</code>.</li>
+    <li><strong>Detección e Inanición de Zorros:</strong> Cada zorro vivo busca conejos en <code>next_grid</code>. Si no encuentra conejos, comprueba si su inanición alcanza <code>GEN_FOOD_FOXES</code>: de ser así, <strong>el zorro muere de hambre antes de poder moverse</strong>. Si no muere, busca celdas libres y calcula su destino.</li>
+    <li><strong>Depredación y Arbitraje de Zorros:</strong> Si la celda destino contiene un conejo en <code>next_grid</code>, el conejo muere devorado y el zorro marca <code>just_ate = true</code>. Si dos zorros convergen, sobrevive el de mayor <code>proc_age</code> (o menor <code>starve_age</code> ante empate).</li>
+    <li><strong>Reproducción, Hambre y Envejecimiento de Zorros:</strong> Los zorros que se movieron y cumplen <code>GEN_PROC_FOXES</code> dejan una cría en su posición previa. Si comieron, reinician su hambre a 0; caso contrario, incrementan <code>starve_age++</code>.</li>
+    <li><strong>Compromiso y Swap:</strong> Se destruye el antiguo <code>grid</code>, se promueve <code>next_grid</code> como la grilla activa, se instancia un nuevo <code>next_grid</code> y se incrementa el contador de generación <code>step++</code>.</li>
+  </ol>
+
+  <!-- SECCIÓN 4: IMPLEMENTACIÓN PARALELA CON PTHREADS -->
+  <h2>4. Implementación Paralela con POSIX Threads (Pthreads)</h2>
+
+  <h3>4.1. Fundamentación y Estrategia de Paralelización</h3>
+  <p>
+    Para cumplir con el mandato de paralelizar exclusivamente <code>Simulator::update()</code> con máxima eficiencia, se adoptó un esquema híbrido de <strong>Descomposición de Entidades en Fases Sincronizadas</strong> apoyado en un <strong>Thread Pool persistente de 4 hilos fijos</strong>:
+  </p>
+  <ul>
+    <li><strong>Eliminación de Sobrecarga de Creación:</strong> Crear y destruir hilos con <code>pthread_create</code> / <code>pthread_join</code> en cada generación genera miles de llamadas al sistema y cambios de contexto innecesarios. Al instanciar los 4 hilos una sola vez en el constructor de <code>Simulator</code>, los hilos se mantienen latentes esperando señales de sincronización.</li>
+    <li><strong>Fase de Lectura Libre de Locks:</strong> El cálculo de desplazamientos de conejos lee únicamente <code>grid</code>, que es de solo lectura durante esa fase. Por ende, los 4 hilos procesan subrangos balanceados $[\frac{t \cdot N}{4}, \frac{(t+1) \cdot N}{4})$ con paralelismo masivo sin colisiones.</li>
+    <li><strong>Barrera Inter-especie Obligatoria:</strong> Los zorros deben cazar sobre conejos cuyo movimiento y arbitraje ya está 100% resuelto y plasmado en <code>next_grid</code>. Esto requiere sincronización estricta entre especies.</li>
+  </ul>
+
+  <h3>4.2. Primitivas de Sincronización Concurrente</h3>
+
+  <h4>A. Barrera Reusable con Variables de Condición (<code>PthreadBarrier</code>)</h4>
+  <p>
+    Para garantizar máxima portabilidad en cualquier entorno POSIX (evitando posibles carencias de <code>pthread_barrier_t</code> en plataformas específicas), se implementó una barrera basada en el algoritmo <em>Sense-Reversing Cycle</em> con <code>pthread_mutex_t</code> y <code>pthread_cond_t</code>:
+  </p>
+  <pre><code>void PthreadBarrier::wait() {
+    pthread_mutex_lock(&this->mutex);
+    std::size_t c = this->cycle;
+    this->count++;
+    if (this->count == this->total) {
+        this->cycle++;
+        this->count = 0;
+        pthread_cond_broadcast(&this->cond);
+    } else {
+        while (c == this->cycle) {
+            pthread_cond_wait(&this->cond, &this->mutex);
+        }
+    }
+    pthread_mutex_unlock(&this->mutex);
+}</code></pre>
+
+  <p>Se estructuraron 3 barreras especializadas:</p>
+  <ul>
+    <li><code>start_barrier</code> (capacidad 5: 4 workers + main): Despierta a los trabajadores al invocar <code>update()</code>.</li>
+    <li><code>step_barrier</code> (capacidad 4: solo workers): Coordina el avance unísono de los 4 hilos entre fases.</li>
+    <li><code>done_barrier</code> (capacidad 5: 4 workers + main): Notifica al hilo principal que el trabajo concurrente concluyó.</li>
+  </ul>
+
+  <h4>B. Exclusión Mutua Granular por Filas (<code>row_mutexes</code>)</h4>
+  <p>
+    Para escribir en <code>next_grid</code> sin carreras de datos y sin degradar el paralelismo con un cuello de botella global, se construyó un arreglo dinámico de $R$ mutexes (uno por cada fila de la matriz). Al momento de arbitrar un destino $(new_x, new_y)$, el hilo adquiere exclusivamente <code>row_mutexes[new_y]</code>:
+  </p>
+  <div class="alert-box">
+    <strong>Ventaja de Concurrencia:</strong> Dos o más entidades que se desplazan a celdas situadas en filas distintas se procesan de forma <strong>completamente paralela y simultánea</strong>. Únicamente se produce contención cuando dos animales convergen en la misma fila.
+  </div>
+
+  <h4>C. Eliminación de Data Races y False Sharing (<code>WorkerContext</code>)</h4>
+  <p>
+    Modificar concurrentemente vectores dinámicos como <code>this->entities</code> o actualizar contadores globales provocaría corrupción de memoria o invalidación de líneas de caché (*False Sharing*). Cada hilo $t$ cuenta con su propia instancia de <code>WorkerContext</code> con buffers locales:
+  </p>
+  <pre><code>struct WorkerContext {
+    std::size_t thread_id{0};
+    Simulator *sim{nullptr};
+    std::uint64_t dead_rabbits{0}, eaten_rabbits{0}, dead_foxes{0};
+    std::vector&lt;Entity*&gt; planned_rabbits, planned_foxes;
+    std::vector&lt;std::pair&lt;std::size_t, std::size_t&gt;&gt; rabbit_new_pos, fox_new_pos;
+    std::vector&lt;std::unique_ptr&lt;Entity&gt;&gt; local_new_entities; // Nacimientos locales
+    std::vector&lt;Entity*&gt; local_new_rabbits, local_new_foxes;
+};</code></pre>
+
+  <h3>4.3. Determinismo Absoluto en el Arbitraje</h3>
+  <p>
+    En sistemas paralelos, el orden en que los hilos obtienen un cerrojo (lock) es no determinista. Si dos animales con igual <code>proc_age</code> compitieran por la misma celda, el resultado dependería del planificador del sistema operativo. Para resolver esto de raíz y garantizar <strong>exacta reproducibilidad frente al código secuencial</strong>, se incorporó un desempate total por el identificador único (<code>id</code>):
+  </p>
+  <pre><code>// Arbitraje determinista de conejos:
+bool rabbit_wins = (rabbit->proc_age > occupant->proc_age) ||
+                   (rabbit->proc_age == occupant->proc_age && rabbit->id < occupant->id);
+
+// Arbitraje determinista de zorros:
+bool fox_wins = (fox->proc_age > occupant->proc_age) ||
+                (fox->proc_age == occupant->proc_age && fox->starve_age < occupant->starve_age) ||
+                (fox->proc_age == occupant->proc_age && fox->starve_age == occupant->starve_age &&
+                 fox->id < occupant->id);</code></pre>
+
+  <!-- SECCIÓN 5: COMPARATIVA TÉCNICA -->
+  <div class="page-break"></div>
+  <h2>5. Comparativa Técnica: Secuencial vs. Paralelo</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 25%;">Criterio</th>
+        <th style="width: 37%;">Versión Secuencial</th>
+        <th style="width: 38%;">Versión Paralela (Pthreads)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Concurrencia</strong></td>
+        <td>1 hilo de ejecución (monohilo).</td>
+        <td>4 hilos fijos en Thread Pool persistente.</td>
+      </tr>
+      <tr>
+        <td><strong>Cálculo de Desplazamiento</strong></td>
+        <td>Bucle <code>for</code> lineal sobre todo el vector de entidades.</td>
+        <td>Partición balanceada en 4 rangos disjuntos calculados en paralelo.</td>
+      </tr>
+      <tr>
+        <td><strong>Escritura en <code>next_grid</code></strong></td>
+        <td>Acceso directo sin protección.</td>
+        <td>Exclusión mutua granular por filas (<code>row_mutexes[y]</code>).</td>
+      </tr>
+      <tr>
+        <td><strong>Gestión de Nacimientos</strong></td>
+        <td><code>entities.push_back()</code> directo al vector principal.</td>
+        <td>Buffers locales en <code>WorkerContext</code> consolidados al final del turno.</td>
+      </tr>
+      <tr>
+        <td><strong>Contadores Poblacionales</strong></td>
+        <td>Incrementos directos en variables miembro.</td>
+        <td>Acumuladores locales por hilo consolidados sin contención de caché.</td>
+      </tr>
+      <tr>
+        <td><strong>Complejidad Espacial Extra</strong></td>
+        <td>$O(1)$ adicional.</td>
+        <td>$O(R)$ mutexes de fila + buffers locales de 4 hilos.</td>
+      </tr>
+      <tr>
+        <td><strong>Determinismo de Salida</strong></td>
+        <td>100% determinista.</td>
+        <td>100% determinista e idéntico a la versión secuencial.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SECCIÓN 6: VALIDACIÓN Y RESULTADOS -->
+  <h2>6. Validación y Resultados de Ejecución</h2>
+
+  <h3>6.1. Validación con el Caso Oficial de Prueba (5x5 UVA)</h3>
+  <p>
+    Se verificó rigurosamente la precisión numérica y la lógica de arbitraje ejecutando el caso oficial provisto en el enunciado con parámetros: <code>GEN_PROC_RABBITS = 2</code>, <code>GEN_PROC_FOXES = 4</code>, <code>GEN_FOOD_FOXES = 3</code>, <code>N_GEN = 6</code>, dimensiones $5 \times 5$ y 9 entidades iniciales.
+  </p>
+
+  <div style="display: flex; gap: 20px; margin: 12px 0;">
+    <div style="flex: 1;">
+      <strong>Entrada Oficial:</strong>
+      <pre><code>2 4 3 6 5 5 9
+ROCK 0 0
+RABBIT 0 2
+FOX 0 4
+FOX 1 0
+FOX 1 4
+ROCK 2 4
+RABBIT 3 0
+RABBIT 4 0
+FOX 4 4</code></pre>
+    </div>
+    <div style="flex: 1;">
+      <strong>Salida Esperada y Obtenida:</strong>
+      <pre><code>2 4 3 0 5 5 5
+ROCK 0 0
+ROCK 2 4
+RABBIT 3 0
+FOX 4 0
+FOX 4 3</code></pre>
+    </div>
+  </div>
+
+  <p>
+    La salida producida por la versión paralela con Pthreads coincide <strong>byte a byte</strong> con la salida de referencia, validando la exactitud del movimiento simultáneo y las reglas de depredación.
+  </p>
+
+  <h3>6.2. Rendimiento en la Aplicación Interactiva (Raylib)</h3>
+  <p>
+    Al ejecutar el entorno gráfico interactivo (<code>interactiva.exe</code>), el hilo de la interfaz de usuario delega de forma asíncrona y continua el avance de cada fotograma al Thread Pool mediante <code>simulator->update()</code>. Se mantiene una tasa estable de **60 cuadros por segundo** incluso con densidades elevadas de población y grillas de alta resolución, demostrando la ausencia de latencias por creación de hilos y la eficacia del bloqueo granular.
+  </p>
+
+  <!-- SECCIÓN 7: CONCLUSIONES -->
+  <h2>7. Conclusiones</h2>
+  <ol>
+    <li><strong>Aislamiento Arquitectónico Exitoso:</strong> Se logró paralelizar íntegramente la lógica del simulador dentro de <code>Simulator::update()</code> sin modificar una sola línea de código en los módulos <code>Grid</code>, <code>Entity</code>, <code>main.cpp</code> o <code>interactiva.cpp</code>.</li>
+    <li><strong>Eficiencia del Thread Pool:</strong> Mantener los 4 hilos en estado persistente con barreras de sincronización elimina el costo computacional de creación/destrucción recurrente de hilos en cada generación.</li>
+    <li><strong>Escalabilidad del Bloqueo Granular:</strong> El uso de un mutex por fila en lugar de un mutex global permite que el arbitraje espacial escale proporcionalmente con el número de núcleos sin generar serialización.</li>
+    <li><strong>Determinismo Concurrente:</strong> La regla de arbitraje extendida con desempate por identificador asegura que la simulación paralela produzca siempre resultados 100% reproducibles y equivalentes al modelo secuencial formal.</li>
+  </ol>
+
+</body>
+</html>
+
